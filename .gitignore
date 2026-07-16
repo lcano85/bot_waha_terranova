@@ -55,3 +55,8 @@ $RECYCLE.BIN/
 
 # Windows shortcuts
 *.lnk
+.env
+terranova.db
+terranova.db-shm
+terranova.db-wal
+carta-page-*.png
