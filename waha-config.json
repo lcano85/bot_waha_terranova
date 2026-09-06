@@ -1,0 +1,6 @@
+{
+  "session": "negocio_local",
+  "port": 3030,
+  "wahaUrl": "http://localhost:3031",
+  "webhookUrl": "http://host.docker.internal:3030/webhook/waha"
+}
