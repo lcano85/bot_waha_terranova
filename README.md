@@ -2,6 +2,8 @@
 
 ## Alertas por correo (negocio_local)
 
+Antes de enviar una nueva alerta de un contacto `@lid`, el trabajador consulta `GET /api/negocio_local/lids/{lid}` en WAHA. Si obtiene un telefono valido, agrega el numero y el enlace `https://wa.me/numero` al correo. Si no hay numero o WAHA falla, envia el identificador original. La consulta tiene un limite de cinco segundos y no bloquea las respuestas de WhatsApp. Los correos ya enviados no se modifican y las alertas antiguas sin metadatos de contacto conservan su formato original.
+
 PHPMailer se instala con `composer install`; se requiere PHP con OpenSSL y Composer para instalar dependencias. Node ejecuta `mail/send.php` como proceso local, sin publicar un endpoint PHP. Referencia: https://github.com/PHPMailer/PHPMailer.
 
 La configuracion local en `.env` usa `SMTP_HOST=mail.terranovarestobar.com`, `SMTP_PORT=465` (TLS implicito), `SMTP_USER=info@terranovarestobar.com`, `ALERT_EMAIL_TO=terranova.restobar.2026@gmail.com` y `EMAIL_ALERTS_ENABLED=true`. Completar `SMTP_PASSWORD` con la clave del buzon emisor; nunca versionarla. `PHP_BIN` indica la ruta al ejecutable PHP.
