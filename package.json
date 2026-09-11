@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "check": "node --check index.js && node --check db.js && node --check mail/contact.js && node --check mail/alerts.js && node --check mail/php-mailer.js && node --check mail/cli.js && php -l mail/send.php",
-    "test": "npm run check && node --test mail/alerts.test.js",
+    "test": "npm run check && node --test mail/alerts.test.js attention.test.js",
     "check:waha": "node check-waha.cjs",
     "mail:verify": "node mail/cli.js verify",
     "mail:test": "node mail/cli.js test"

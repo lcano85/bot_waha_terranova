@@ -33,6 +33,7 @@
 <script>
 let password=sessionStorage.adminPassword||'', data={}, current='settings', pendingStatusChange=null;
 const definitions={
+ attention:{title:'Atención de asesores'},
  settings:{title:'Datos del negocio',fields:[['business_name','Nombre'],['address','Dirección'],['address_reference','Referencia'],['phone','Teléfono'],['card_url','URL de carta digital']]},
  schedules:{title:'Horarios',fields:[['name','Nombre'],['days','Días (0=dom, 1=lun...)'],['start_time','Inicio','time'],['end_time','Fin','time'],['sort_order','Orden','number']]},
  categories:{title:'Categorías',fields:[['schedule_ids','Turnos en los que aparece','schedules'],['name','Nombre'],['emoji','Emoji'],['description','Descripción'],['sort_order','Orden','number']]},
@@ -44,7 +45,33 @@ async function login(){password=document.querySelector('#password').value;try{aw
 async function load(){data=await api('/data');document.querySelector('#login').classList.add('hidden');document.querySelector('#app').classList.remove('hidden');renderTabs();render()}
 function renderTabs(){tabs.innerHTML=Object.entries(definitions).map(([key,d])=>`<button class="ghost ${key===current?'active':''}" onclick="current='${key}';renderTabs();render()">${d.title}</button>`).join('')}
 function fieldHtml([key,label,type='text'],value=''){const wide=['address','address_reference','card_url','description','price_text'].includes(key)||type==='schedules'?'wide':'',numberOptions=type==='number'?(key==='price'?'step="0.01" min="0" inputmode="decimal"':'step="1" inputmode="numeric"'):'';if(type==='category')return `<label class="${wide}">${label}<select name="${key}" required>${data.categories.map(c=>`<option value="${c.id}" ${String(c.id)===String(value)?'selected':''}>${c.emoji} ${c.name}</option>`).join('')}</select></label>`;if(type==='schedules'){const selected=Array.isArray(value)?value.map(String):[];return `<div class="wide"><label>${label}</label><div class="schedule-options">${data.schedules.filter(s=>s.active).map(s=>`<label><input type="checkbox" name="${key}" value="${s.id}" ${selected.includes(String(s.id))?'checked':''}>${s.name}<span class="muted">${s.start_time}–${s.end_time}</span></label>`).join('')}</div></div>`}const tag=key.includes('description')||key.includes('reference')?'textarea':'input';return `<label class="${wide}">${label}<${tag} name="${key}" ${tag==='input'?`type="${type}" ${numberOptions}`:''} value="${tag==='input'?(value??''):''}">${tag==='textarea'?(value??''):''}</${tag}></label>`}
-function render(){const d=definitions[current];if(current==='settings'){content.innerHTML=`<div class="card"><h2>${d.title}</h2><form onsubmit="saveSettings(event)" class="grid">${d.fields.map(f=>fieldHtml(f,data.settings[f[0]])).join('')}<button>Guardar cambios</button></form></div>`;return}content.innerHTML=`<div class="card"><h2>Nueva entrada</h2><form onsubmit="createItem(event)" class="grid">${d.fields.map(f=>fieldHtml(f)).join('')}<button>Agregar</button></form></div><div class="card"><h2>${d.title}</h2>${data[current].map(rowHtml).join('')||'<p class="muted">No hay registros.</p>'}</div>`}
+function render(){if(current==='attention'){renderAttention();return}const d=definitions[current];if(current==='settings'){content.innerHTML=`<div class="card"><h2>${d.title}</h2><form onsubmit="saveSettings(event)" class="grid">${d.fields.map(f=>fieldHtml(f,data.settings[f[0]])).join('')}<button>Guardar cambios</button></form></div>`;return}content.innerHTML=`<div class="card"><h2>Nueva entrada</h2><form onsubmit="createItem(event)" class="grid">${d.fields.map(f=>fieldHtml(f)).join('')}<button>Agregar</button></form></div><div class="card"><h2>${d.title}</h2>${data[current].map(rowHtml).join('')||'<p class="muted">No hay registros.</p>'}</div>`}
+let attentionRequest=0;
+async function renderAttention(){
+ const request=++attentionRequest;
+ content.innerHTML='<div class="card"><h2>Atención de asesores</h2><p>Cargando...</p></div>';
+ try {
+  const rows=await api('/attention');
+  if(current!=='attention'||request!==attentionRequest)return;
+  content.innerHTML='<div class="card"><h2>Atención de asesores</h2><p class="muted">El bot se habilita automáticamente 30 minutos después de pasar al asesor. Si terminas antes, pulsa Finalizar atención para habilitarlo de inmediato. En ambos casos, el menú aparece con el siguiente mensaje del cliente.</p><button class="ghost" onclick="renderAttention()">Actualizar</button><div id="attentionRows"></div></div>';
+  const list=document.getElementById('attentionRows');
+  if(!rows.length)list.textContent='No hay atenciones pendientes.';
+  for(const row of rows){
+   const item=document.createElement('div');item.className='row';
+   const info=document.createElement('div');
+   const title=document.createElement('strong');title.textContent=row.chat_id;
+   const status=document.createElement('div');status.className='muted';
+   status.textContent=row.status==='active'?'En atención · Bot pausado':row.status==='waiting'?'Bot pausado hasta '+new Date(row.resume_at).toLocaleString('es-PE',{timeZone:'America/Lima'}):'Bot habilitado · Esperando mensaje del cliente';
+   info.append(title,status);item.append(info);
+   if(row.status!=='ready'){
+    const button=document.createElement('button');button.textContent='Finalizar atención';
+    button.onclick=async()=>{button.disabled=true;try{await api('/attention/finish',{method:'POST',body:JSON.stringify({chatId:row.chat_id})});await renderAttention()}catch(e){alert(e.message);button.disabled=false}};
+    item.append(button);
+   }
+   list.append(item);
+  }
+ }catch(e){if(current==='attention')content.textContent=e.message}
+}
 function rowHtml(row){const d=definitions[current],title=current==='categories'?`${row.emoji||'🍽️'} ${row.name}`:(row.title||row.name),scheduleNames=current==='categories'?(row.schedule_ids||[]).map(id=>data.schedules.find(s=>s.id===id)?.name).filter(Boolean):[],order=current==='categories'?`Turnos: ${scheduleNames.join(', ')||'sin asignar'} · Orden: ${row.sort_order||'sin definir'}`:'',hasStatus=['products','categories'].includes(current),status=hasStatus?`<button type="button" class="status-switch ${row.active?'active':''}" role="switch" aria-checked="${Boolean(row.active)}" onclick="askStatusChange('${current}',${row.id})">${row.active?'Activo':'Inactivo'}</button>`:'';return `<div class="row"><div><strong>${title}</strong><div class="muted">${order}${order&&row.description?' · ':''}${row.description||''}${row.price!==undefined?` · S/ ${Number(row.price).toFixed(2)}`:''}${row.start_time?` · ${row.start_time}–${row.end_time}`:''}</div></div><div class="actions">${status}<button class="ghost" onclick='editItem(${JSON.stringify(row)})'>Editar</button><button class="danger" onclick="removeItem(${row.id})">Eliminar</button></div></div>`}
 function formObject(form){const formData=new FormData(form),result=Object.fromEntries(formData.entries());if(form.querySelector('[name="schedule_ids"]'))result.schedule_ids=formData.getAll('schedule_ids');return result}
 async function saveSettings(e){e.preventDefault();await api('/settings',{method:'PUT',body:JSON.stringify(formObject(e.target))});flash();await load()}

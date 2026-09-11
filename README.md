@@ -30,7 +30,17 @@ El bot usa WAHA y guarda su contenido administrable en SQLite (`terranova.db`). 
 
 El panel permite editar los datos del negocio, horarios, promociones, categorías, productos y precios. Los cambios son consultados por el bot en los siguientes mensajes, sin reiniciarlo.
 
-## Promociones
+## Atención de asesores
+
+Al elegir la opción 7 o entregar los datos de un pedido, el cliente queda en atención con el bot pausado. Mientras dure la atención, ningún mensaje del cliente (incluidos `hola`, `menu`, números o `pedido`) reactiva el bot.
+
+El bot se habilita automáticamente 30 minutos después de pasar al asesor. Los mensajes durante ese plazo no lo extienden. Si el asesor termina antes, puede pulsar **Finalizar atención** en el panel para habilitar el bot inmediatamente. En ambos casos, el siguiente mensaje del cliente recibe el menú; no se envía al vencer el plazo ni al pulsar el botón. El panel muestra la hora de habilitación (Perú). El cierre manual se conserva entre reinicios.
+
+El estado persiste en SQLite entre reinicios. Las atenciones existentes también usan el plazo de 30 minutos desde su inicio. Un identificador `@lid` no es un número telefónico.
+
+Para cargar este cambio hay que reiniciar el proceso del bot con `npm start`. Las atenciones anteriores a esta versión estaban únicamente en memoria y no pueden recuperarse automáticamente tras ese primer reinicio.
+
+## Reglas de promociones
 
 Los días usan números separados por comas: `0` domingo, `1` lunes, ..., `6` sábado. Una promoción puede tener una fecha específica; en ese caso esa fecha tiene prioridad sobre el día semanal. El horario final es exclusivo y se admiten franjas que cruzan medianoche, por ejemplo `17:00` a `00:00`.
 

@@ -16,6 +16,7 @@ const WAHA_SESSION = process.env.WAHA_SESSION || "pry";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "cambiar-esta-clave";
 const TIME_ZONE = "America/Lima";
 const sesiones = new Map();
+const attention = require("./attention").createAttention(store.db);
 
 const MENU_PRINCIPAL = `👋 *¡Bienvenido a Terranova Restobar!*
 
@@ -118,8 +119,9 @@ async function procesarMenuPrincipal(chatId, opcion) {
   } else if (opcion === "6") {
     await enviarTexto(chatId, config.card_url ? `📖 *CARTA DIGITAL*\n\n${config.card_url}\n\nEscribe *menu* para volver.` : "📖 La carta digital está siendo actualizada. Puedes ver los productos en la opción 3 del menú.");
   } else if (opcion === "7") {
+    attention.start(chatId);
     sesiones.set(chatId, { estado: "asesor" });
-    await enviarTexto(chatId, `👨‍💼 *ATENCIÓN DE UN ASESOR*\n\nEn breve continuará una persona de nuestro equipo.\n📲 ${config.phone}\n\nPara volver al bot, escribe *menu*.`);
+    await enviarTexto(chatId, `👨‍💼 *ATENCIÓN DE UN ASESOR*\n\nEn breve continuará una persona de nuestro equipo.\n📲 ${config.phone}\n\nEl bot permanecerá en pausa mientras te atendemos.`);
   } else await enviarTexto(chatId, `No reconocí esa opción 😅\n\n${MENU_PRINCIPAL}`);
 }
 
@@ -130,6 +132,13 @@ function requireAdmin(req, res, next) {
   next();
 }
 app.use("/api/admin", requireAdmin);
+app.get("/api/admin/attention", (_req, res) => res.json(attention.list()));
+app.post("/api/admin/attention/finish", (req, res) => {
+  if (typeof req.body?.chatId !== "string") return res.status(400).json({ error: "Cliente inválido" });
+  const row = attention.finish(req.body.chatId);
+  if (!row) return res.status(404).json({ error: "Atención no encontrada" });
+  res.json(row);
+});
 app.get("/api/admin/data", (_req, res) => {
   const categories = store.all("SELECT * FROM categories ORDER BY sort_order").map((category) => ({
     ...category,
@@ -187,8 +196,16 @@ app.post("/webhook/waha", async (req, res) => {
     const payload = evento.payload || {};
     if (payload.fromMe === true) return;
     const chatId = payload.from || payload.chatId;
-    try { alerts.record(evento, sesiones.get(chatId)?.estado); }
+    if (typeof chatId !== "string" || !/@(?:c\.us|s\.whatsapp\.net|lid)$/.test(chatId)) return;
+    try { alerts.record(evento, attention.get(chatId) ? "asesor" : sesiones.get(chatId)?.estado); }
     catch (error) { console.error("[correo] No se pudo guardar alerta:", error.message); }
+    const mode = attention.consume(chatId);
+    if (mode === "paused") return;
+    if (mode === "resumed") {
+      sesiones.set(chatId, { estado: "principal" });
+      await enviarTexto(chatId, MENU_PRINCIPAL);
+      return;
+    }
     const texto = normalizarTexto(payload.body);
     if (!chatId || !texto || chatId.endsWith("@g.us")) return;
     await marcarComoLeido(chatId, payload.id);
@@ -196,7 +213,7 @@ app.post("/webhook/waha", async (req, res) => {
     if (["pedido", "pedir"].includes(texto)) { sesiones.set(chatId, { estado: "esperando_pedido" }); await enviarTexto(chatId, "🛒 Escribe producto, cantidad, dirección y forma de pago. Un asesor lo confirmará."); return; }
     const sesion = sesiones.get(chatId) || { estado: "principal" };
     if (sesion.estado === "asesor") return;
-    if (sesion.estado === "esperando_pedido") { sesiones.set(chatId, { estado: "asesor", pedido: payload.body }); await enviarTexto(chatId, "✅ *¡Recibimos tu pedido!*\n\nUn asesor confirmará precio y disponibilidad. Para volver escribe *menu*."); console.log(`[NUEVO PEDIDO] ${chatId}: ${payload.body}`); return; }
+    if (sesion.estado === "esperando_pedido") { attention.start(chatId); sesiones.set(chatId, { estado: "asesor", pedido: payload.body }); await enviarTexto(chatId, "✅ *¡Recibimos tu pedido!*\n\nUn asesor confirmará precio y disponibilidad. El bot permanecerá en pausa mientras te atendemos."); console.log(`[NUEVO PEDIDO] ${chatId}: ${payload.body}`); return; }
     if (sesion.estado === "categorias") {
       if (texto === "0") { sesiones.set(chatId, { estado: "principal" }); await enviarTexto(chatId, MENU_PRINCIPAL); return; }
       const schedule = turnoVigente();
